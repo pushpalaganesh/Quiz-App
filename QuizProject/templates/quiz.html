@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Required meta tags -->
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css"
+          integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+
+    <title>Django Quiz App</title>
+    <style>
+        .correct-answer {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+
+        .wrong-answer {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        body {
+            background-image: url('https://img.freepik.com/premium-vector/hexagons-pattern-background-genetic-research-molecular-structure_322958-3031.jpg?w=2000');
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+            background-size: cover;
+            margin: 0; y
+            padding: 0;
+        }
+    </style>
+</head>
+<body>
+<div class="container mt-5 pt-5">
+    <div class="col-md-8 mx-auto">
+        <h3 class="text-center">Quiz</h3>
+        <div id="quiz-container"></div>
+        <button id="submit-quiz" class="btn btn-primary mt-4" disabled>Submit</button>
+        <h4 id="score-display" class="mt-4 text-success" style="display: none;"></h4>
+        <h5 id="details-display" class="mt-4" style="display: none;"></h5>
+    </div><br><br>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const gfg = '{{ gfg }}'; // Dynamic parameter from Django
+        const apiUrl = `/api/get-quiz/?gfg=${gfg}`;
+        let questions = [];
+        let userAnswers = {};
+        let timerInterval;
+
+        // Fetch questions from the server
+        fetch(apiUrl)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status && data.data.length > 0) {
+                    questions = data.data;
+                    renderQuiz(questions);
+                    document.getElementById('submit-quiz').disabled = false;
+
+                    // Start the timer after the quiz is loaded
+                    startTimer(30 * 60); // 30 minutes in seconds
+                } else {
+                    alert('No questions found for the selected quiz type.');
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching quiz data:', error);
+                alert('Failed to load quiz. Please try again.');
+            });
+
+        // Function to render the quiz
+        function renderQuiz(questions) {
+            const container = document.getElementById('quiz-container');
+            container.innerHTML = ''; // Clear any existing content
+
+            questions.forEach((question, index) => {
+                const questionBlock = document.createElement('div');
+                questionBlock.classList.add('mb-4');
+                questionBlock.innerHTML = `
+                    <h5>Question ${index + 1}:</h5>
+                    <p>${question.question}</p>
+                `;
+
+                question.answer.forEach((answer, answerIndex) => {
+                    const answerId = `question-${index}-answer-${answerIndex}`;
+                    const answerBlock = document.createElement('div');
+                    answerBlock.classList.add('form-check');
+
+                    answerBlock.innerHTML = `
+                        <input
+                            class="form-check-input"
+                            type="radio"
+                            name="question-${index}"
+                            id="${answerId}"
+                            value="${answer.is_correct}">
+                        <label class="form-check-label" for="${answerId}">
+                            ${answer.answer}
+                        </label>
+                    `;
+
+                    // Track user's answer
+                    answerBlock.querySelector('input').addEventListener('change', (event) => {
+                        userAnswers[`question-${index}`] = {
+                            isCorrect: event.target.value === 'true',
+                            selectedAnswerId: answerId
+                        };
+                    });
+
+                    questionBlock.appendChild(answerBlock);
+                });
+
+                container.appendChild(questionBlock);
+            });
+        }
+
+        // Function to start the timer
+        function startTimer(duration) {
+            const timerDisplay = document.createElement('h5');
+            timerDisplay.id = 'timer-display';
+            timerDisplay.classList.add('text-danger', 'text-center', 'mt-3');
+            timerDisplay.textContent = formatTime(duration);
+            document.querySelector('.container').prepend(timerDisplay);
+
+            let timeRemaining = duration;
+
+            timerInterval = setInterval(() => {
+                timeRemaining--;
+                timerDisplay.textContent = formatTime(timeRemaining);
+
+                if (timeRemaining <= 0) {
+                    clearInterval(timerInterval);
+                    alert('Time is up! Submitting your quiz automatically.');
+                    submitQuiz(); // Automatically submit the quiz when time runs out
+                }
+            }, 1000);
+        }
+
+        // Function to format time as MM:SS
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+        }
+
+        // Submit the quiz and calculate the score
+        function submitQuiz() {
+            let score = 0;
+            let correctCount = 0;
+            let wrongCount = 0;
+
+            questions.forEach((question, index) => {
+                const correctAnswer = question.answer.find(ans => ans.is_correct);
+                const userAnswer = userAnswers[`question-${index}`];
+
+                if (userAnswer && userAnswer.isCorrect) {
+                    score += question.marks;
+                    correctCount++;
+                    // Highlight correct answer
+                    document.getElementById(userAnswer.selectedAnswerId).parentElement.classList.add('correct-answer');
+                } else {
+                    wrongCount++;
+                    // Highlight correct answer
+                    const correctAnswerId = `question-${index}-answer-${question.answer.indexOf(correctAnswer)}`;
+                    document.getElementById(correctAnswerId).parentElement.classList.add('correct-answer');
+
+                    // Highlight wrong answer (if selected)
+                    if (userAnswer) {
+                        document.getElementById(userAnswer.selectedAnswerId).parentElement.classList.add('wrong-answer');
+                    }
+                }
+            });
+
+            // Display score and details
+            const scoreDisplay = document.getElementById('score-display');
+            scoreDisplay.textContent = `Your Score: ${score}/${questions.length * 5}`;
+            scoreDisplay.style.display = 'block';
+
+            const detailsDisplay = document.getElementById('details-display');
+            detailsDisplay.textContent = `Correct Answers: ${correctCount}, Wrong Answers: ${wrongCount}`;
+            detailsDisplay.style.display = 'block';
+
+            // Disable submit button after submission
+            document.getElementById('submit-quiz').disabled = true;
+        }
+
+        // Attach manual submit button click to submitQuiz function
+        document.getElementById('submit-quiz').addEventListener('click', () => {
+            clearInterval(timerInterval); // Stop the timer when manually submitted
+            submitQuiz();
+        });
+    });
+</script>
+
+</body>
+</html>
